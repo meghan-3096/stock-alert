@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:munit="http://www.mulesoft.org/schema/mule/munit" xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xsi:schemaLocation="
+		http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+		http://www.mulesoft.org/schema/mule/munit-tools  http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd">
+	<munit:config name="stock-market-alerts-test-suite.xml" />
+	<munit:test name="stock-market-alerts-test-suite-listTopicsTest" doc:id="69be0b8f-0350-42e4-8251-2d1aaac2a86f" description="Test">
+		<munit:execution >
+			<flow-ref doc:name="Flow-ref to listTopics" doc:id="f562c579-f660-4460-8185-b7c7639c1bdf" name="listTopics"/>
+		</munit:execution>
+	</munit:test>
+
+
+</mule>

@@ -1,0 +1,533 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:sns="http://www.mulesoft.org/schema/mule/sns"
+	xmlns:sqs="http://www.mulesoft.org/schema/mule/sqs"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:twilio="http://www.mulesoft.org/schema/mule/twilio" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/twilio http://www.mulesoft.org/schema/mule/twilio/current/mule-twilio.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/sqs http://www.mulesoft.org/schema/mule/sqs/current/mule-sqs.xsd
+http://www.mulesoft.org/schema/mule/sns http://www.mulesoft.org/schema/mule/sns/current/mule-sns.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="b2ac4e7d-e77e-4d64-b4d9-207f8b3c8735" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<twilio:config name="Twilio_Connector_Config" doc:name="Twilio Connector Config" doc:id="4b900c0f-2484-43d9-a1df-486aa24a2ec7" >
+		<twilio:account-sid-auth-token-connection username="${twilio.sid}" password="${twilio.token}" />
+	</twilio:config>
+	<configuration-properties doc:name="Configuration properties" doc:id="6a3e22bd-1236-4ea1-86cc-452a788f610d" file="config.yaml" />
+	<http:request-config name="HTTP_Request_configuration" doc:name="HTTP Request configuration" doc:id="30ecd6b5-7e85-4d0f-b0d8-82bcb54543b9" basePath="/2010-04-01/Accounts" >
+		<http:request-connection host="api.twilio.com" protocol="HTTPS">
+			<http:authentication >
+				<http:basic-authentication username="${twilio.sid}" password="${twilio.token}" />
+			</http:authentication>
+		</http:request-connection>
+	</http:request-config>
+	<sqs:config name="Amazon_SQS_Configuration" doc:name="Amazon SQS Configuration" doc:id="076eaf66-25a2-4e13-b32e-a7b6cf1cb1cd" defaultQueueUrl="https://sqs.ap-south-1.amazonaws.com/423679305922/defaultQueue" >
+		<sqs:basic-connection testQueueArn="arn:aws:sqs:ap-south-1:423679305922:testQueue" accessKey="AKIAWFJKBFDBOGQJH5GP" secretKey="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" region="ap-south-1" />
+	</sqs:config>
+	<sns:config name="Amazon_SNS_configuration" doc:name="Amazon SNS configuration" doc:id="a34618a0-38a1-4cad-9973-11fa6ede4cad" defaultTopicArn="arn:aws:sns:ap-south-1:423679305922:testTopic.fifo" >
+		<sns:basic-connection testTopic="arn:aws:sns:ap-south-1:423679305922:testTopic.fifo" accessKey="AKIAWFJKBFDBOGQJH5GP" secretKey="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" region="AP_SOUTH_1" />
+	</sns:config>
+	<http:request-config name="HTTP_Request_configuration1" doc:name="HTTP Request configuration" doc:id="7be133ce-e2d8-40ec-a159-8a1cbfa01b9d">
+		<http:request-connection protocol="HTTPS" host="latest-stock-price.p.rapidapi.com" responseBufferSize="102400"/>
+	</http:request-config>
+	<db:config name="Database_Config" doc:name="Database Config" doc:id="06a47017-be69-46f3-b50e-d70d5210d350" >
+		<db:my-sql-connection host="35.154.159.2" port="3306" user="test" password="password" database="stocks" >
+			<db:connection-properties ><db:connection-property key="useSSL" value="false" /></db:connection-properties>
+		</db:my-sql-connection>
+	</db:config>
+	<flow name="stock-market-alertsFlow" doc:id="2e322606-52bd-4a76-a4f6-72c27e5ea991" initialState="started">
+		<scheduler doc:name="Scheduler" doc:id="fbe2a477-ae9e-4f89-816e-43fcaa41be7f" >
+			<scheduling-strategy >
+				<fixed-frequency frequency="30" timeUnit="SECONDS"/>
+			</scheduling-strategy>
+		</scheduler>
+		<flow-ref doc:name="Flow Reference listTopics" doc:id="57b87108-78f3-4750-837e-48c972ca8922" name="listTopics" target="topics"/>
+		<flow-ref doc:name="get users Flow Reference" doc:id="3c6242a6-7f81-4a70-a24a-e76edb66ce6d" name="getUsers" target="users" />
+		<flow-ref doc:name="Flow Reference getStockInfo" doc:id="5eab35a3-e044-4aff-9d2a-b159cffa40ba" name="getStockInfo" />
+		<ee:transform doc:name="Transform Message" doc:id="6ee58edc-f0c7-44a4-b90d-d03844e1ab58" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	symbol: payload.symbol,
+	identifier: payload.identifier,
+	open: payload.open,
+	dayHigh: payload.dayHigh,
+	dayLow: payload.dayLow,
+	lastPrice: payload.lastPrice,
+	previousClose: payload.previousClose,
+	change: payload.change,
+	pChange: payload.pChange,
+	yearHigh: payload.yearHigh,
+	yearLow: payload.yearLow,
+	totalTradedVolume: payload.totalTradedVolume,
+	totalTradedValue: payload.totalTradedValue,
+	lastUpdateTime: payload.lastUpdateTime,
+	perChange365d: payload.perChange365d,
+	perChange30d: payload.perChange30d
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<parallel-foreach collection="#[payload]" maxConcurrency="1">
+			<choice doc:name="Choice" doc:id="e4eab204-339a-4ff8-a85e-c4728768b5dd" >
+				<when expression='#[vars.topics contains(payload.symbol replace /[^a-z0-9A-Z]/ with "")]' doc:id="38926c55-2996-485c-ae7f-9f604650108d">
+					<logger level="INFO" doc:name="Logger" doc:id="bdc9377d-8bd9-4661-b75b-191c76c1343f" message='#["topic for " ++ payload.symbol as String ++ " is found"]'/>
+				</when>
+				<otherwise >
+					<flow-ref doc:name="createTopic Flow Reference" doc:id="c171aec5-511b-46ef-b200-42274c70f56f" name="createTopic"/>
+					<logger level="INFO" doc:name="Logger" doc:id="19ca1d01-b2ad-4847-91dd-fc96e1dbe706" message='#[" No topic for " ++ payload.symbol as String ++ " found, creating a new topic"]' />
+					<flow-ref doc:name="subscribe Flow Reference" doc:id="ddf1ee40-877c-4040-9165-462434e26a75" name="subscribe"/>
+				</otherwise>
+			</choice>
+			<ee:transform doc:name="Transform Message" doc:id="cd45a995-f03c-45f1-bd14-f576f97f4087" >
+				<ee:message >
+					<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"topicARN":"arn:aws:sns:ap-south-1:423679305922:" ++ (payload.symbol replace /[^a-z0-9A-Z]/ with ""),
+	"message":{
+		"users" : vars.users filter (value, index) -> (value.stockName == payload.symbol and value.pChange <= abs(payload.pChange)),
+		"stockInfo":payload	
+	}
+}]]></ee:set-payload>
+				</ee:message>
+			</ee:transform>
+			<logger level="INFO" doc:name="Logger" doc:id="f29d41f3-33b7-4815-b6ee-ff0ce94abd81" message="#[payload]" />
+			<choice doc:name="Choice" doc:id="61c5c437-598b-4455-a97c-a15f172ae463" >
+				<when expression="#[sizeOf(payload.message.users) &gt; 0]">
+					<logger level="INFO" doc:name="Logger" doc:id="a0acc276-6dd5-4c8a-bd96-137b1f87602d" message="users have subsribed to this stock"/>
+					<flow-ref doc:name="publish Flow Reference" doc:id="bf00a40c-525b-4908-865c-fa93dff093a9" name="publish"/>
+				</when>
+				<otherwise >
+					<logger level="INFO" doc:name="Logger" doc:id="fddc48e1-4bc8-4aea-8ce0-40a65120fec3" message="No users have subscribed to this stock, thus not publishing any message"/>
+				</otherwise>
+			</choice>
+  
+</parallel-foreach>
+		<error-handler>
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="659f7c3c-7ac0-42a3-b0c0-3c4c08a616ab" type="SNS:AUTHORIZATION_ERROR, SNS:CONNECTIVITY, SNS:ENDPOINT_DISABLED, SNS:INTERNAL_ERROR, SNS:INVALID_PARAMETER, SNS:INVALID_PARAMETER_VALUE, SNS:NOT_FOUND, SNS:PLATFORM_APPLICATION_DISABLED, SNS:RETRY_EXHAUSTED, SNS:SUBSCRIPTION_LIMIT_EXCEEDED, SNS:THROTTLED, SNS:TOPIC_LIMIT_EXCEEDED, SNS:UNDEFINED_TOPIC, SNS:UNKNOWN">
+				<logger level="INFO" doc:name="Logger" doc:id="f0938f66-cf0c-4dba-9acc-1fc7f85d8269" message="#[error.description]"/>
+			</on-error-propagate>
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="beb7b7f9-4f34-4e38-9ce9-d1e1f396a51e" type="HTTP:BAD_GATEWAY, HTTP:BAD_REQUEST, HTTP:CLIENT_SECURITY, HTTP:CONNECTIVITY, HTTP:FORBIDDEN, HTTP:INTERNAL_SERVER_ERROR, HTTP:METHOD_NOT_ALLOWED, HTTP:NOT_ACCEPTABLE, HTTP:NOT_FOUND, HTTP:PARSING, HTTP:RETRY_EXHAUSTED, HTTP:SECURITY, HTTP:SERVICE_UNAVAILABLE, HTTP:TIMEOUT, HTTP:TOO_MANY_REQUESTS, HTTP:UNAUTHORIZED, HTTP:UNSUPPORTED_MEDIA_TYPE">
+				<logger level="INFO" doc:name="Logger" doc:id="a44c1db0-b74f-42d8-a593-ae8f5408bf7d" />
+			</on-error-propagate>
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="3d1e5e36-41f5-4e3c-8ca4-c83d11b988ef" type="ANY">
+				<set-payload value='#["Error has occurred. Please contact support team"]' doc:name="Set Payload" doc:id="f12f342c-7680-4d6e-a4b9-a8ed5556f9f2" />
+				<logger level="INFO" doc:name="Logger" doc:id="f60a0ff2-cd19-4e7f-a9f9-a165e70d1f15" />
+			</on-error-continue>
+		</error-handler>
+	</flow>
+	<flow name="sendSMS" doc:id="7f29d699-376c-4aa8-a451-f29245128452" >
+		<http:listener doc:name="POST /sms/{receiver}" doc:id="f9694660-5881-4ba1-833e-87fdc5a783f7" config-ref="HTTP_Listener_config" path="/sms/{receiver}" allowedMethods="POST"/>
+		<choice doc:name="Choice" doc:id="166de836-0246-43c3-b30f-1a7ce18db566" >
+			<when expression="#[payload.messageType == 'whatsapp']">
+				<set-variable value='#["whatsapp:+91" ++ payload.contactNumber as String]' doc:name="Set reciever" doc:id="9ac41816-026e-4153-a3e7-0a8ead38bf0a" variableName="receiver" />
+				<set-payload value="#[vars.stockInfo]" doc:name="Set Payload" doc:id="bfea16ed-10c1-40a9-bfff-00a8199dce12" />
+				<ee:transform doc:name="Transform Message" doc:id="d901bc3d-4e0a-46e5-b7f8-72e530267f8b">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/x-www-form-urlencoded
+---
+{
+	To: vars.receiver,
+	From: p('twilio.whatsapp'),
+	Body : payload.symbol ++ " has \nOPEN = " ++ payload.open ++ 
+	"\ndayHigh = " ++ payload.dayHigh ++ 
+	"\ndayLow = " ++ payload.dayLow ++ 
+	"\npreviousClose = " ++ payload.previousClose ++ 
+	"\nlastPrice = " ++ payload.lastPrice ++ 
+	"\nChange = " ++ payload.change ++
+	"\nPercentage Change = " ++ payload.pChange  ++ 
+	"\ntotalTradedVolume = " ++ payload.totalTradedVolume ++ 
+	"\ntotalTradedValue = " ++ payload.totalTradedValue
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+			</when>
+			<otherwise >
+				<set-variable value='#["+91" ++ payload.contactNumber as String]' doc:name="Set reciever" doc:id="cf0972e6-7893-4cf6-9cca-c84ae8745bab" variableName="receiver" />
+				<set-payload value="#[vars.stockInfo]" doc:name="Set Payload" doc:id="3161a45d-d893-4469-bf39-98c1fe2b8c25" />
+				<ee:transform doc:name="Transform Message" doc:id="f7c40ecf-9501-421d-ab52-5ff7646375aa">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/x-www-form-urlencoded
+---
+{
+	To: vars.receiver,
+	From: p('twilio.sender'),
+	Body : payload.symbol ++ " has \nOPEN = " ++ payload.open ++ 
+	"\ndayHigh = " ++ payload.dayHigh ++ 
+	"\ndayLow = " ++ payload.dayLow ++ 
+	"\npreviousClose = " ++ payload.previousClose ++ 
+	"\nlastPrice = " ++ payload.lastPrice ++ 
+	"\nChange = " ++ payload.change ++
+	"\nPercentage Change = " ++ payload.pChange  ++ 
+	"\ntotalTradedVolume = " ++ payload.totalTradedVolume ++ 
+	"\ntotalTradedValue = " ++ payload.totalTradedValue
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</otherwise>
+		</choice>
+		<try doc:name="Try" doc:id="c34475df-c5a3-4057-865d-c3a69600e09a" >
+			<twilio:create20100401-accounts-messagesjson-by-account-sid doc:name="Create Message" doc:id="d95be15f-c5d8-4dc7-99d7-bb93a16a6c24" config-ref="Twilio_Connector_Config" accountSid="${twilio.sid}" />
+			<error-handler >
+				<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="f6872a2b-e1e2-4cc3-a2dd-3719c2864d32" type="TWILIO:BAD_REQUEST, TWILIO:CLIENT_ERROR, TWILIO:CONNECTIVITY, TWILIO:INTERNAL_SERVER_ERROR, TWILIO:NOT_ACCEPTABLE, TWILIO:NOT_FOUND, TWILIO:RETRY_EXHAUSTED, TWILIO:SERVER_ERROR, TWILIO:SERVICE_UNAVAILABLE, TWILIO:TIMEOUT, TWILIO:TOO_MANY_REQUESTS, TWILIO:UNAUTHORIZED, TWILIO:UNSUPPORTED_MEDIA_TYPE">
+					<ee:transform doc:name="Transform Message" doc:id="8b0fbebe-f60a-4f71-bce3-63cdbe4d0faa" >
+						<ee:message >
+							<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	'message': error.description
+}]]></ee:set-payload>
+						</ee:message>
+					</ee:transform>
+				</on-error-propagate>
+			</error-handler>
+		</try>
+		<ee:transform doc:name="Transform Message" doc:id="ea8dc7fd-bbf8-4c30-9f52-478d0fd7aa2a" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="7ad745e3-c13a-4e87-b972-aca2fa4c55f9" />
+		<error-handler >
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="5aee7e84-30ab-49c7-9058-d49874142cc0" type="ANY">
+				<ee:transform doc:name="Transform Message" doc:id="0966ccaf-ed66-415f-bc34-6a953fb2803f" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	'message': error.description
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</on-error-propagate>
+		</error-handler>
+	</flow>
+	<flow name="createQueue" doc:id="6bd47bb0-0972-44bf-8d39-ecae9c81445b" >
+		<http:listener doc:name="GET /createQueue" doc:id="0f5ba02d-9c0e-49ed-a82a-1a389d475e53" config-ref="HTTP_Listener_config" path="/createQueue" allowedMethods="GET"/>
+		<sqs:create-queue doc:name="Create queue" doc:id="b59587ab-7e29-4d03-b4f4-33efaf1a9cac" config-ref="Amazon_SQS_Configuration" queueName="#[attributes.queryParams.queueName]"/>
+		<logger level="INFO" doc:name="Logger" doc:id="8ae25e0d-f33d-4066-b449-1a62c9c8cdcf" message="#[payload]"/>
+		<error-handler >
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="3bb52fe7-b9b5-49fc-aeb7-b812d3080575" type="ANY">
+				<logger level="INFO" doc:name="Logger" doc:id="a0ed7322-63ad-4198-972a-25db46043115" message="#[error.description]"/>
+			</on-error-continue>
+		</error-handler>
+	</flow>
+	<flow name="sendMessage" doc:id="a74a7ff2-e138-4b59-8f88-78abf7c86ec0" >
+		<http:listener doc:name="POST /sendMessage" doc:id="66535e22-a130-4442-abac-c45bf5c12b4c" config-ref="HTTP_Listener_config" path="/sendMessage" allowedMethods="POST"/>
+		<set-variable value='#[%dw 2.0&#10;output application/java&#10;---&#10;{&#10;  body:payload.message&#10;} as Object {&#10;class: "org.mule.extension.sqs.api.model.Message"&#10;}]' doc:name="Set message" doc:id="44d08c36-f84c-459a-ac22-6e95e0baefac" variableName="message"/>
+		<try doc:name="Try" doc:id="76fa8407-f9ee-48c1-8146-a0b5131ac948" >
+			<sqs:send-message doc:name="Send message" doc:id="0ac68feb-7c8f-4571-a8c8-dc7442395820" config-ref="Amazon_SQS_Configuration" queueUrl="https://sqs.ap-south-1.amazonaws.com/423679305922/testQueue1">
+			<sqs:message><![CDATA[#[vars.message]]]></sqs:message>
+		</sqs:send-message>
+			<error-handler >
+				<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="1648b0b9-8732-4a40-ab43-6fcf74d3337c" type="SQS:ACCESS_DENIED, SQS:CONNECTIVITY, SQS:INTERNAL_FAILURE, SQS:INVALID_CREDENTIALS, SQS:INVALID_DATA, SQS:MESSAGE_SIZE_THRESHOLD_OUT_OF_RANGE, SQS:OPT_IN_REQUIRED, SQS:PARAMETER_OUT_OF_RANGE, SQS:REQUEST_EXPIRED, SQS:RETRY_EXHAUSTED, SQS:S3_BUCKET_ACCESS_DENIED, SQS:S3_BUCKET_NOT_FOUND, SQS:SERVICE_UNAVAILABLE, SQS:THROTTLING_EXCEPTION">
+					<logger level="INFO" doc:name="Logger" doc:id="5ff12b33-ffc2-4679-99df-c7f43a1fd8ba" message="#[error.description]"/>
+				</on-error-propagate>
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="35b675cd-104f-4c68-8d16-a23e4f17368d" type="ANY">
+					<logger level="INFO" doc:name="Logger" doc:id="ec19057f-c89b-496b-b419-22dc420bee9d" message="#[error.description]"/>
+				</on-error-continue>
+			</error-handler>
+		</try>
+		<logger level="INFO" doc:name="Logger" doc:id="064cbcfe-5f57-4211-976b-d91aacbedd5d" message="Message sent : #[vars.message]"/>
+		<ee:transform doc:name="Transform Message" doc:id="d0fb71af-94b4-4b7c-82c1-6f3e210b42ad" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<error-handler >
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="5f46f35d-df2b-4fe0-a7c3-1342a568f4db" type="ANY">
+				<logger level="INFO" doc:name="Logger" doc:id="3e5071f1-5f79-4cee-8b9c-0f21610066b4" message="#[error.description]"/>
+			</on-error-continue>
+		</error-handler>
+	</flow>
+	<flow name="receiveMessages" doc:id="1d3ed59d-5eac-46fa-81be-cba125173ef2" >
+		<sqs:receivemessages doc:name="Receive messages" doc:id="83dd422e-6d47-4373-9ddd-f9ec2e098f65" config-ref="Amazon_SQS_Configuration" queueUrl="https://sqs.ap-south-1.amazonaws.com/423679305922/testQueue1"/>
+		<logger level="INFO" doc:name="Logger" doc:id="de2f8f32-bc95-4bfa-b85a-e626ad6e045c" message="message received." />
+		<ee:transform doc:name="Transform Message" doc:id="7db36ed7-5a2f-4b02-afbf-9f462bb46aa1" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+read(payload,"application/json")]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="f08e14b4-b896-43ae-8b89-4dc5d0487cbb" message="#[payload]" />
+		<ee:transform doc:name="Copy_of_Transform Message" doc:id="4b5ed1a9-a82c-49d0-bc99-6042119180b2">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+read(payload.Message,"application/json")]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="1746213a-1706-4504-90ee-ea2fe28b1616" message="#[payload]"/>
+		<logger level="INFO" doc:name="Logger" doc:id="e4758697-b042-465c-bcb5-f58e93cf60a4" message="#[payload.stockInfo]"/>
+		<set-variable value="#[payload.stockInfo]" doc:name="Set Variable" doc:id="c7c7266f-626a-44f1-bc56-4e2d2df2d97a" variableName="stockInfo"/>
+		<parallel-foreach doc:name="Parallel For Each" doc:id="d6c16f22-2a3e-4c95-9766-0149a47f54cc" collection="#[payload.users]" maxConcurrency="1">
+			<flow-ref doc:name="sendSMS Flow Reference" doc:id="adb02a87-2410-4973-ae3b-ee8f026e61d6" name="sendSMS"/>
+		</parallel-foreach>
+		<error-handler >
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="5f1dc349-271d-41ae-967e-0d008c6eea91" type="ANY">
+				<ee:transform doc:name="Transform Message" doc:id="57596cc4-3c36-44c5-b425-f5f17d2b64d4" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	'message': error.description
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<logger level="INFO" doc:name="Logger" doc:id="9b714af7-f9a8-4c18-9ace-8b21e145cedf" message="#[error.description]"/>
+			</on-error-propagate>
+		</error-handler>
+	</flow>
+	<flow name="listQueues" doc:id="50ac1c45-a951-40ff-ae6c-b8edd789ea37" >
+		<http:listener doc:name="GET /listQueues" doc:id="0b94a41f-a853-4d01-bb72-225d8e50954f" config-ref="HTTP_Listener_config" path="/listQueues" allowedMethods="GET"/>
+		<sqs:list-queues doc:name="List queues" doc:id="02203521-06e5-4289-9458-3d8bfdf1aa87" config-ref="Amazon_SQS_Configuration" queueNamePrefix="test"/>
+		<logger level="INFO" doc:name="Logger" doc:id="3e58a428-d678-4fa3-a643-006edb6353ff" message="#[payload]"/>
+		<error-handler >
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="1a88febc-d24f-4f42-9eb1-8909536278b7" type="SQS:ACCESS_DENIED, SQS:CONNECTIVITY, SQS:INTERNAL_FAILURE, SQS:INVALID_CREDENTIALS, SQS:INVALID_DATA, SQS:OPT_IN_REQUIRED, SQS:REQUEST_EXPIRED, SQS:RETRY_EXHAUSTED, SQS:SERVICE_UNAVAILABLE, SQS:THROTTLING_EXCEPTION">
+				<logger level="INFO" doc:name="Logger" doc:id="aa1aa173-1f63-4d57-838c-b23cf704860c" message="#[error.description]"/>
+			</on-error-propagate>
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="2e4c3e53-a0cc-4967-9ab0-b715d7259c1a" type="ANY">
+				<logger level="INFO" doc:name="Logger" doc:id="5c0f8b4a-b24c-4dc5-9e00-f91a6d88e4b3" message="#[error.description]"/>
+			</on-error-continue>
+		</error-handler>
+	</flow>
+	<flow name="deleteQueue" doc:id="51a32e2d-3c15-4bb5-a8c6-c759b6db19df" >
+		<http:listener doc:name="GET /deleteQueue" doc:id="9ae87a83-997d-42c9-a812-27ff50a98c64" config-ref="HTTP_Listener_config" path="/deleteQueue" allowedMethods="GET"/>
+		<sqs:get-queue-url doc:name="Get queue url" doc:id="b5e6fd53-5658-4723-acea-2088246429c8" config-ref="Amazon_SQS_Configuration" queueName="#[attributes.queryParams.queueName]" queueOwnerAWSAccountId="423679305922"/>
+		<set-variable value="#[payload]" doc:name="Set queueURL" doc:id="7d5b7507-6482-4d97-a504-c0a4928bb4a2" variableName="queueURL"/>
+		<sqs:get-approximate-number-of-messages doc:name="Get approximate number of messages" doc:id="db0e8a92-bff2-4a6c-b46d-b55e4500cc92" config-ref="Amazon_SQS_Configuration" queueUrl="#[vars.queueURL]" target="messagesCount"/>
+		<choice doc:name="Choice" doc:id="ae359204-6cec-48b2-82bf-b1380dcd5c1f" >
+			<when expression="#[vars.messagesCount &gt; 0]">
+				<logger level="INFO" doc:name="Logger" doc:id="f15c9ab8-c085-4033-b728-d51d63d3a11c"/>
+				<sqs:purge-queue doc:name="Purge queue" doc:id="69f1eec1-81ed-4079-9cad-2e3cb8471284" config-ref="Amazon_SQS_Configuration" queueUrl="#[vars.queueURL]"/>
+				<logger level="INFO" doc:name="Logger" doc:id="28a2f194-7438-4eae-8a8d-6ec03c99423f" />
+			</when>
+			<otherwise >
+				<logger level="INFO" doc:name="Logger" doc:id="1d9c4743-f468-4859-b629-f0a12bd67853" />
+			</otherwise>
+		</choice>
+		<sqs:delete-queue doc:name="Delete queue" doc:id="e27861b9-22dc-4da2-adc4-7427b8208226" config-ref="Amazon_SQS_Configuration" queueUrl="#[vars.queueURL]"/>
+		<logger level="INFO" doc:name="Logger" doc:id="ba51197a-d4cd-4e37-8cea-0871bdfa3fa6" />
+	</flow>
+	<flow name="listTopics" doc:id="eb02383e-93cc-4435-961f-9af5adaec427" >
+		<http:listener doc:name="GET /listTopics" doc:id="abcb21a6-4bae-4345-b607-bbeed4d950a5" config-ref="HTTP_Listener_config" path="/listTopics" allowedMethods="GET"/>
+		<sns:list-topics doc:name="List topics" doc:id="fbbd0b12-fd31-43e6-aa14-fe414be60ad3" config-ref="Amazon_SNS_configuration"/>
+		<ee:transform doc:name="Transform Message" doc:id="3ffe0979-0d7e-4d69-a70a-a2791e9c2d7e" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+
+payload map (value, index) -> splitBy(value.payload,/:/)[5]]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<error-handler >
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="a479f785-fcff-4d4a-8871-789d6404bdee" type="SNS:AUTHORIZATION_ERROR, SNS:ENDPOINT_DISABLED, SNS:INTERNAL_ERROR, SNS:INVALID_PARAMETER, SNS:INVALID_PARAMETER_VALUE, SNS:NOT_FOUND, SNS:PLATFORM_APPLICATION_DISABLED, SNS:SUBSCRIPTION_LIMIT_EXCEEDED, SNS:THROTTLED, SNS:TOPIC_LIMIT_EXCEEDED, SNS:UNDEFINED_TOPIC, SNS:UNKNOWN">
+				<logger level="INFO" doc:name="Logger" doc:id="f0b403ab-502c-4af2-b83a-99bf2d1bd58d" message="#[error.description]"/>
+			</on-error-propagate>
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="d0b15e4f-50cc-4071-b252-d391e90dfddd" type="EXPRESSION, STREAM_MAXIMUM_SIZE_EXCEEDED">
+				<logger level="INFO" doc:name="Logger" doc:id="9b43a984-96b2-4bbe-b997-45415f78579b" message="#[error.description]"/>
+			</on-error-continue>
+		</error-handler>
+	</flow>
+	<flow name="createTopic" doc:id="a96646ea-e2a1-4635-bd01-eba001171097" >
+		<http:listener doc:name="POST /createTopic" doc:id="ccfef8e8-525a-4175-a3bb-18cea4d3e7c0" config-ref="HTTP_Listener_config" path="/createTopic" allowedMethods="POST"/>
+		<sns:create-topic doc:name="Create topic" doc:id="b77de528-1a3c-4713-8b36-a191666991ac" config-ref="Amazon_SNS_configuration" topicName='#[payload.symbol replace /[^a-z0-9A-Z]/ with ""]'/>
+		<logger level="INFO" doc:name="Logger" doc:id="91b7d2f9-4510-47be-bc8c-f4f830190b03" message="#[payload]"/>
+		<error-handler >
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="3589b55b-b2b6-4ba7-9813-4e7da74321db" type="SNS:AUTHORIZATION_ERROR, SNS:CONNECTIVITY, SNS:ENDPOINT_DISABLED, SNS:INTERNAL_ERROR, SNS:INVALID_PARAMETER, SNS:INVALID_PARAMETER_VALUE, SNS:NOT_FOUND, SNS:PLATFORM_APPLICATION_DISABLED, SNS:RETRY_EXHAUSTED, SNS:SUBSCRIPTION_LIMIT_EXCEEDED, SNS:THROTTLED, SNS:TOPIC_LIMIT_EXCEEDED, SNS:UNDEFINED_TOPIC, SNS:UNKNOWN">
+				<logger level="INFO" doc:name="Logger" doc:id="3ad6625b-59b0-4eba-866c-41b5cc0eb0d0" message="#[error.description]"/>
+			</on-error-propagate>
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="45dc2676-a43e-4de3-810b-a0eb8732d101" type="ANY">
+				<logger level="INFO" doc:name="Logger" doc:id="1585934b-415f-49b1-a2a3-3cced19c3129" message="#[error.description]"/>
+			</on-error-continue>
+		</error-handler>
+	</flow>
+	<flow name="deleteTopic" doc:id="248d9636-e98e-49ac-a4dc-7eb7cf9aa776" >
+		<http:listener doc:name="GET /deleteTopic" doc:id="ee5378fb-0180-4265-9bb7-9caf4b3ac57c" config-ref="HTTP_Listener_config" path="/deleteTopic" allowedMethods="GET"/>
+		<sns:delete-topic doc:name="Delete topic" doc:id="fdcd8a7b-1a6d-4b74-aaee-b7480027056d" config-ref="Amazon_SNS_configuration" topicArn="#[attributes.queryParams.topicARN]"/>
+		<logger level="INFO" doc:name="Logger" doc:id="994ef4d5-043c-4d8b-b7cf-8af381b4ee1c" message="#[payload]"/>
+	</flow>
+	<flow name="publish" doc:id="0d32414d-ca44-4697-bab4-3984ef8ed3fe" initialState="started">
+		<http:listener doc:name="POST /publish" doc:id="58f06785-29cd-406e-aa72-dd34c39dd8bc" config-ref="HTTP_Listener_config" path="/publish" allowedMethods="POST"/>
+		<sns:publish doc:name="Publish" doc:id="4f7eb5be-bd5e-4d6d-91b1-0f88f5bfeb87" config-ref="Amazon_SNS_configuration" topicArn="#[payload.topicARN]">
+			<sns:message ><![CDATA[#[%dw 2.0
+output text/plain
+---
+write(payload.message,"application/json")]]]></sns:message>
+		</sns:publish>
+		<logger level="INFO" doc:name="Logger" doc:id="0c2346c4-a837-47e0-a0ea-4839017b0890" message="message published"/>
+		<error-handler >
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="fc0fb13b-9842-4fae-aaa1-9ff07f6d15d4" type="SNS:AUTHORIZATION_ERROR, SNS:CONNECTIVITY, SNS:ENDPOINT_DISABLED, SNS:INTERNAL_ERROR, SNS:INVALID_PARAMETER, SNS:INVALID_PARAMETER_VALUE, SNS:NOT_FOUND, SNS:PLATFORM_APPLICATION_DISABLED, SNS:RETRY_EXHAUSTED, SNS:SUBSCRIPTION_LIMIT_EXCEEDED, SNS:THROTTLED, SNS:TOPIC_LIMIT_EXCEEDED, SNS:UNDEFINED_TOPIC, SNS:UNKNOWN">
+				<logger level="INFO" doc:name="Logger" doc:id="6eb7206f-be38-4714-973c-13cfbc296b5d" message="#[error.description]"/>
+			</on-error-propagate>
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="567b3f50-d1b5-4ddf-811a-66df1a20dd8c" type="ANY">
+				<logger level="INFO" doc:name="Logger" doc:id="1c109a35-c013-4252-be1c-0e1d0d1b18fe" message="#[error.description]"/>
+			</on-error-continue>
+		</error-handler>
+	</flow>
+	<flow name="subscribe" doc:id="c1d779d0-255a-440a-bdbd-af4cbb5e0500" >
+		<http:listener doc:name="POST /subscribe" doc:id="f75e6926-9c9b-45f8-a098-d40b28a18237" config-ref="HTTP_Listener_config" path="/subscribe" allowedMethods="POST"/>
+		<sns:subscribe doc:name="Subscribe" doc:id="e21e37e5-fabb-4e35-b0ea-17ba21055a93" config-ref="Amazon_SNS_configuration" topicArn="#[payload]" protocol="SQS" endpoint="arn:aws:sqs:ap-south-1:423679305922:testQueue1" target="temp"/>
+		<error-handler >
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="285995fd-315e-40f3-8c0b-328e73a2dfd2" type="ANY">
+				<logger level="INFO" doc:name="Logger" doc:id="537dd2f8-f4d1-4e35-8947-4150dfbf14eb" message="#[error.description]"/>
+			</on-error-continue>
+		</error-handler>
+	</flow>
+	<flow name="getStockInfo" doc:id="559c1915-449e-4f22-bba8-cd5e86039562" >
+		<http:listener doc:name="GET /stockInfo" doc:id="b9075df2-769f-47bb-a4c9-5b7507299ce1" config-ref="HTTP_Listener_config" path="/stockInfo" allowedMethods="GET"/>
+		<logger level="INFO" doc:name="Logger" doc:id="be5f8157-29a2-41c7-8011-3290deb930b1" message="making the request to rapid api"/>
+		<try doc:name="Try" doc:id="34cecc4e-e034-47c5-beec-7e4c73b4f43a" >
+			<http:request method="GET" doc:name="Request" doc:id="92e77db4-d39b-45b7-b5e7-ec12397b72c2" config-ref="HTTP_Request_configuration1" path="/any">
+			<http:headers><![CDATA[#[output application/java
+---
+{
+	"x-rapidapi-key" : "cd88012f17msh02107666185e285p10349ajsn5ec4e9cdaf1f",
+	"x-rapidapi-host" : "latest-stock-price.p.rapidapi.com"
+}]]]></http:headers>
+		</http:request>
+			<error-handler >
+				<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="cdf85865-b741-4e39-a462-c991c1a62201" type="ANY">
+					<logger level="INFO" doc:name="Logger" doc:id="92aecf37-cd38-4b9a-904d-89497a032357" message="#[error.description]"/>
+				</on-error-propagate>
+			</error-handler>
+		</try>
+		<logger level="INFO" doc:name="Logger" doc:id="0cb84d42-8682-4fc0-8593-fb4e0b0807a2" message="request operation is done"/>
+		<ee:transform doc:name="Transform Message" doc:id="aa6d44a2-982e-45ce-a74f-5847cdde1986" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+import * from dw::core::Arrays
+output application/json
+---
+if (sizeOf(payload)>0)
+slice(payload,0,5)
+else
+[]]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<error-handler >
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="d6742b60-ac75-4262-983c-0f1f3c40d33d" type="HTTP:BAD_GATEWAY, HTTP:BAD_REQUEST, HTTP:CLIENT_SECURITY, HTTP:CONNECTIVITY, HTTP:FORBIDDEN, HTTP:INTERNAL_SERVER_ERROR, HTTP:METHOD_NOT_ALLOWED, HTTP:NOT_ACCEPTABLE, HTTP:NOT_FOUND, HTTP:PARSING, HTTP:RETRY_EXHAUSTED, HTTP:SECURITY, HTTP:SERVICE_UNAVAILABLE, HTTP:TIMEOUT, HTTP:TOO_MANY_REQUESTS, HTTP:UNAUTHORIZED, HTTP:UNSUPPORTED_MEDIA_TYPE">
+				<logger level="INFO" doc:name="Logger" doc:id="0c03c354-9056-4d2a-a918-f03670607598" message="#[error.description]"/>
+			</on-error-propagate>
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="34e3d447-0b54-4f50-97b3-28e8fed95a9f" type="ANY">
+				<logger level="INFO" doc:name="Logger" doc:id="1dc7fc1c-bed3-4ded-8f6e-1137c1114500" message="#[error.description]"/>
+			</on-error-continue>
+		</error-handler>
+	</flow>
+	<flow name="getUsers" doc:id="c5a916b8-6599-40f9-81ee-7436489e3872" >
+		<http:listener doc:name="GET /users" doc:id="744f3fee-93e5-4fb3-bc7e-d5b3f356c8ff" config-ref="HTTP_Listener_config" path="/users" allowedMethods="GET"/>
+		<try doc:name="Try" doc:id="1525c303-9c05-428e-b041-9160c072f157" >
+			<db:select doc:name="Select Users from DB" doc:id="ed401ccd-4cdc-4e7e-9d6b-2af7e8a43659" config-ref="Database_Config">
+			<db:sql><![CDATA[SELECT * from Users]]></db:sql>
+		</db:select>
+			<error-handler >
+				<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="d3d8e9a8-ed49-43d7-b98a-33f35a8edc66" type="DB:BAD_SQL_SYNTAX, DB:CONNECTIVITY, DB:QUERY_EXECUTION">
+					<logger level="INFO" doc:name="Logger" doc:id="2ad85d23-98af-423f-b196-83ce63735700" message="#[error.description]"/>
+				</on-error-propagate>
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="a6754881-53fa-4367-b5ec-d603bb1ad268" type="ANY">
+					<logger level="INFO" doc:name="Logger" doc:id="c7f33d44-17cd-4b63-9c12-f156069c020d" message="#[error.description]"/>
+				</on-error-continue>
+			</error-handler>
+		</try>
+		<ee:transform doc:name="Transform Message" doc:id="cfe69f97-e700-4b11-a149-9430cc681fd0" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="ad57eea1-a225-48ca-9406-1627b24383b3" message="#[payload]" />
+		<error-handler>
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="90a64ce6-7792-452d-b8f4-1e91897da129" type="ANY">
+				<logger level="INFO" doc:name="Logger" doc:id="5bc1ab61-378d-400f-a04e-2b4c3e16e1ed" message="#[error.description]"/>
+			</on-error-continue>
+		</error-handler>
+	</flow>
+	<flow name="postUsers" doc:id="5ce857a7-a11e-4838-a453-c6527d541b71" >
+		<http:listener doc:name="POST /users" doc:id="73cce3b7-55d5-4c8b-b368-75321dbd8172" config-ref="HTTP_Listener_config" path="/users" allowedMethods="POST" />
+		<db:insert doc:name="Insert User to DB" doc:id="93b3dd03-bfdf-4483-8abf-1d2ef197ac4d" config-ref="Database_Config">
+			<db:sql ><![CDATA[INSERT INTO Users (userName, stockName, pChange, contactNumber, messageType)
+VALUES (:userName,:stockName,:pChange,:contactNumber,:messageType);]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{
+	userName:payload.userName,
+	stockName:payload.stockName,
+	pChange:payload.pChange,
+	contactNumber:payload.contactNumber,
+	messageType:payload.messageType
+}]]]></db:input-parameters>
+		</db:insert>
+		<ee:transform doc:name="transform to json payload" doc:id="3528165d-b7fa-4b5e-952a-c04511ef5c9b" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Log payload" doc:id="c6638b83-7f93-4895-96d4-ae4a58350af7" message="#[payload]" />
+	</flow>
+	<flow name="updateUsers" doc:id="78186344-f20c-4559-adb3-1bfd86dec0d5" >
+		<http:listener doc:name="PUT/users/{userId}" doc:id="f1826f8d-5da4-42ef-89c2-319ebd8a8edd" config-ref="HTTP_Listener_config" path="/users/{userId}" allowedMethods="PUT" />
+		<db:update doc:name="Update user info in DB" doc:id="a55d7469-6669-4b80-b64e-749f9b522acc" config-ref="Database_Config">
+			<db:sql ><![CDATA[UPDATE Users 
+SET userName =:userName, stockName=:stockName, pChange=:pChange, contactNumber=:contactNumber, messageType=:messageType
+WHERE userId = :userId;]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{
+	userId: attributes.uriParams.userId as Number,
+	userName: payload.userName,
+	stockName: payload.stockName,
+	pChange: payload.pChange,
+	contactNumber: payload.contactNumber,
+	messageType: payload.messageType
+}]]]></db:input-parameters>
+		</db:update>
+		<ee:transform doc:name="transform to json payload" doc:id="ad693634-3339-4d97-b444-785b3c2ce3f0" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Log payload" doc:id="b195d4cc-db8a-491e-87ea-86d86d6c3ec4" message="#[payload]" />
+	</flow>
+	<flow name="deleteUsers" doc:id="8482d05a-e0bd-4090-999e-4c06550ceb0c" >
+		<http:listener doc:name="DELETE/users/{userId}" doc:id="d811867a-06a0-46b7-b0c3-5772527dfa50" config-ref="HTTP_Listener_config" path="/users/{userId}" allowedMethods="DELETE" />
+		<db:delete doc:name="Delete User from DB" doc:id="c440adee-6f10-486b-9310-46e29f96dd62" config-ref="Database_Config">
+			<db:sql ><![CDATA[DELETE FROM Users WHERE userId = :userId ;]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{
+	userId: attributes.uriParams.userId as Number
+}]]]></db:input-parameters>
+		</db:delete>
+		<ee:transform doc:name="transform to json payload" doc:id="56f2991d-38ec-4f68-9105-1989208585b5" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Log payload" doc:id="b1cfaac5-c8a2-4a49-ad83-2c3629dda7f1" message="#[payload]" />
+	</flow>
+</mule>

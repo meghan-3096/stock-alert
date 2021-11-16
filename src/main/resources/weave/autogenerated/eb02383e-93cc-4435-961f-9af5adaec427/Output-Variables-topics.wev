@@ -1,0 +1,15 @@
+%dw 2.0
+
+type auto_eb02383e_93cc_4435_961f_9af5adaec427_Output_Variables_topics = Array<org_mule_runtime_api_message_Message>
+type org_mule_runtime_api_message_Message = {|
+  payload: String, 
+  attributes: org_mule_extension_sns_api_attributes_RequestIDAttribute
+|} {"typeId": "org.mule.runtime.api.message.Message"}
+type org_mule_extension_sns_api_attributes_RequestIDAttribute = {| requestId?: String |} {"typeAlias": "RequestIDAttribute",
+"class": "org.mule.extension.sns.api.attributes.RequestIDAttribute",
+"typeId": "org.mule.extension.sns.api.attributes.RequestIDAttribute"}
+
+
+
+
+

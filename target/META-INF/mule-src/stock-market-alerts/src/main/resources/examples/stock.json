@@ -1,0 +1,18 @@
+{
+      "symbol": "NIFTY 50",
+      "identifier": "NIFTY 50",
+      "open": 18127.05,
+      "dayHigh": 18132.65,
+      "dayLow": 18023.95,
+      "lastPrice": 18063.15,
+      "previousClose": 18109.45,
+      "change": -46.29999999999927,
+      "pChange": -0.26,
+      "yearHigh": 18604.45,
+      "yearLow": 12730.25,
+      "totalTradedVolume": 124070430,
+      "totalTradedValue": 98634902922.58,
+      "lastUpdateTime": "16-Nov-2021 11:51:17",
+      "perChange365d": 42.37,
+      "perChange30d": -1.25
+}

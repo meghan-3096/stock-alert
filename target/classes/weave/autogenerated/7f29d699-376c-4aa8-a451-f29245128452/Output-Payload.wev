@@ -1,0 +1,26 @@
+%dw 2.0
+
+type auto_7f29d699_376c_4aa8_a451_f29245128452_Output_Payload = {
+  error_message?: String, 
+  subresource_uris?: { _?: Any }, 
+  date_sent?: String, 
+  date_updated?: String, 
+  date_created?: String, 
+  api_version?: String, 
+  body?: String, 
+  num_segments?: String, 
+  uri?: String, 
+  num_media?: String, 
+  sid?: String, 
+  price_unit?: String, 
+  messaging_service_sid?: String, 
+  price?: String, 
+  account_sid?: String, 
+  error_code?: Number, 
+  from?: String, 
+  to?: String, 
+  direction?: "outbound-api" | "outbound-call" | "inbound" | "outbound-reply", 
+  status?: "read" | "partially_delivered" | "scheduled" | "queued" | "undelivered" | "accepted" | "delivered" | "received" | "failed" | "sent" | "receiving" | "sending", 
+  _?: Any
+}
+
